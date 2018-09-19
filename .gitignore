@@ -1,0 +1,6 @@
+.ninja*
+lib/tioc/tioc.o
+lib/tioc/libtioc.a
+bin/main.o
+bin/tioc
+man/man1/tioc.1

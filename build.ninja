@@ -1,0 +1,20 @@
+cflags = -Wall -Wextra -Wpedantic -Werror -std=gnu99 -I lib
+lflags = -L lib -luuid
+
+rule compile
+    command = gcc $cflags -c -o $out $in
+
+rule archive
+    command = ar rcs $out $in
+
+rule link
+    command = gcc $cflags -o $out $in $lflags
+
+rule man
+    command = pandoc -s -t man $in > $out
+
+build lib/tioc/tioc.o: compile lib/tioc/tioc.c
+build lib/tioc/libtioc.a: archive lib/tioc/tioc.o
+build bin/main.o: compile bin/main.c
+build bin/tioc: link lib/tioc/tioc.o bin/main.o
+build man/man1/tioc.1: man man/man1/tioc.1.pandoc

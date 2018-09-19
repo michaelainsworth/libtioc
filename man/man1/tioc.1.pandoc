@@ -1,0 +1,200 @@
+% TIOC(1) | Michael Ainsworth
+
+# NAME
+
+**tioc** -- read and write labelled data
+
+# SYNOPSIS
+
+**tioc** [ **command** ] [ **arguments** ]
+
+# DESCRIPTION
+
+**tioc** is a tool used to test the **libtioc** library, by writing labelled data to
+standard output and reading labelled data from standard input.
+
+# COMMANDS
+
+help
+: Displays this man page.
+
+write
+: Write labelled data to standard output.
+
+read
+: Read data from standard input.
+
+expect
+: Expect exact data from standard input.
+
+# LABELS
+
+All data must be labelled.  A label is a string between 1 and 80 characters
+(inclusive) and consisting of only lowercase letters and underscores.  This is
+a convention that roughly maps to C-style identifiers.
+
+Because all data must be labelled, the **write**, **read** and **expect** commands must include the **-l** (or **\--label**) argument.
+
+# DATA FORMAT
+
+For all data types, labels are separated from the actual data using a colon
+(':').  All data is also terminated with a newline character ('\n').
+
+Unsigned integers and UUIDs are simply represented:
+
+    user_id:36ff7d8d-6255-4ac2-bc69-808197b43535
+    registered:1534466554
+
+For both strings and blobs, the length appears first, followed by the data
+itself.
+
+    first_name:4:John
+    last_name:3:Doe
+
+Strings cannot contain a NULL byte, but blobs can, so viewing the data in
+a text editor may show display issues.
+
+    image_data:16345:...
+
+# WRITING DATA
+
+An unsigned integer can be written with the **-n** or **\--unsigned** argument,
+followed by an unsigned value.  For example:
+
+    ~]$ tioc write --label height --unsigned 175
+    height:175
+
+A UUID can be written with the **-u** or **\--uuid** argument, followed by
+a UUID value. For example:
+
+    ~]$ tioc write --label id --uuid $(uuidgen)
+    id:089b9630-4245-45d5-bc26-26a8d50cfd46
+
+A NULL-terminated string can be written with the **-s** or **\--string**
+argument, followed by the string value.  For example:
+
+    ~]$ tioc write --label name --string John
+    name:4:John
+
+A sequence of bytes in a file can be written with the **-b** or **\--blob**
+argument, followed by the file name containing the binary data.  For example:
+
+    ~]$ cat sig.txt
+    To err is human.
+    To forgive is divine.
+    ~]$ tioc write --label signature --blob sig.txt
+    signature:39:To err is human.
+    To forgive is divine.
+
+By default, the write command only writes a single value to standard output. By
+supplying the **-c** or **\--chain** argument, all data on standard input is
+first sent to standard output before writing the data.  This allows the dummy
+construction of a file from multiple commands.  For example:
+
+    ~]$ tioc write **-l** a -n 1 | tioc write -l b -n 2 -c
+    a:1
+    b:2
+
+# READING DATA
+
+The read command reads the labelled data from standard input, strips off the
+label, and writes the value to standard output.
+
+An unsigned integer can be read with the **-n** or **\--unsigned** argument.  For
+example:
+
+    ~]$ tioc write --label a --unsigned 1 | tioc read --label a -n
+    1
+
+A UUID can be read with the **-u** or **\--uuid** argument.  For example:
+
+    ~]$ tioc write --label a --uuid $(uuidgen) | tioc read --label a -u
+    8e9ed21c-ec57-485a-9d70-67e0e25dd015
+
+A string can be read with the **-s** or **\--string** argument.  For example:
+
+    ~]$ tioc write --label a --string John | tioc read --label a -s
+    John
+
+A blob can be read with the **-b** or **\--blob** argument.  For example:
+
+    ~]$ tioc write --label a --blob sig.txt | tioc read --label a -b
+    To err is human.
+    To forgive is divine.
+
+By default, the data value is written to standard output.  This can be
+supressed with the **-q** or **\--quiet** argument.  For example:
+
+    ~]$ tioc write --label a --unsigned 1 | tioc read --label a -n
+
+By  default,  any  additional  input besides the labelled data on the first
+line is ignored.  The **read** command can be instructed to concatenate
+standard input to standard output after processing using the **-c** or
+**\--chain** argument. Unlike the **write** command, which concatenates data
+before processing, the  **read** command  concatenates data after processing.
+This allows verification of the input/output routines.  For example:
+
+    ~]$ tioc write --label name --string John            | \
+        tioc write --label height --unsigned 175 --chain | \
+        tioc read --label name --string --chain          | \
+        tioc read --label height --unsigned --chain
+
+(Note that the **\--chain** argument implies **\--quiet** for the **read**
+command.)
+
+The above works as follows:
+
+1. The first write command outputs "name:John\n".
+
+2. The second write command concatenates "name:John\n", then writes
+   "height:175\n".
+
+3. The first read command reads "name:John\n", then concatenates
+   "height:175\n".
+
+4. The second read command reads "height:175\n".
+
+Note that doing the above produces no output, and is solely meant for
+verification purposes of the input/output routines.
+
+Note also that when processing the **read** command, if the label specified does
+not match, an error is produced.  For example:
+
+    ~]$ tioc write --label name --string John | tioc read --label first_name --string
+    libtioc: expect_label(): Expected 'first_name' but found 'name:4:Joh'.
+    libtioc: read_callback(): Unable to read label 'first_name'.
+    tioc: Unable to read string.
+
+# EXPECTING DATA
+
+When reading data, the expected label must match the actual label, or else
+there is an error.  "Expecting" data is a stronger form of this, where the data
+itself must match that specified.  Expecting data is performed with the expect
+command.
+
+To expect an exact unsigned value, use the **-n** or **\--unsigned** argument.
+
+    ~]$ tioc write --label a --unsigned 1 | tioc expect --label a --unsigned 1
+    1
+
+To expect an exact string value, use the **-s** or **\--string** argument.
+
+    ~]$ tioc write --label a --string hello | tioc expect --label a --string hello
+    hello
+
+To expect an exact UUID value, use the **-u** or **\--uuid** argument.
+
+    ~]$ u=$(uuidgen)
+    ~]$ echo $u
+    028d8992-bdb3-44ed-a027-c650e7082ab0
+    ~]$ tioc write --label id --uuid $u | tioc expect --label id --uuid $u
+    028d8992-bdb3-44ed-a027-c650e7082ab0
+
+Just like the read command, output can be suppressed using the **-q** or \--quiet
+argument.  Likewise, the remaining output can be concatenated with the **-c** or
+\--chain argument.
+
+
+# BUGS
+
+Please send any bug reports to: michael\@michaelainsworth.id.au
